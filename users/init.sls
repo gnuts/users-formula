@@ -3,6 +3,21 @@
 {% set used_sudo = [] %}
 {% set used_googleauth = [] %}
 
+#
+# TODO
+# add authgroups:
+#   * an authgroup is a group of users that shall have access to a unix account on a host
+#     -> this is a separate sls
+#
+# add accounts:
+#   * if an accounts pillar exists, only add users on this host that are mentioned in accounts.
+#     * groups of users to add
+#     * additional single users to add
+#     * absent users: make sure, these are deleted
+#
+# -> put authgroups and accounts to separate sls files, keep changes to init.sls minimal
+
+
 {%- for name, user in pillar.get('users', {}).items() if user.absent is not defined or not user.absent %}
 {%- if user == None -%}
 {%- set user = {} -%}
