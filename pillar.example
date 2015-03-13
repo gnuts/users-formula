@@ -56,3 +56,20 @@ users:
 absent_users:
   - donald
   - bad_guy
+
+# add keys of userlists to accounts:
+users_authgroups:
+  root:
+    - auser
+    - buser
+  git:
+    - buser
+    - cuser
+
+# only create these user accounts:
+# if "accounts
+users_accounts:
+  - auser
+  - buser
+
+
