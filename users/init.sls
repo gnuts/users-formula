@@ -18,46 +18,48 @@
 # -> put authgroups and accounts to separate sls files, keep changes to init.sls minimal
 
 
-{%- for name, user in pillar.get('users', {}).items() if user.absent is not defined or not user.absent %}
-{%- if user == None -%}
-{%- set user = {} -%}
-{%- endif -%}
-{%- if 'sudouser' in user and user['sudouser'] %}
-{%- do used_sudo.append(1) %}
-{%- endif %}
-{%- if 'google_auth' in user %}
-{%- do used_googleauth.append(1) %}
-{%- endif %}
+# prepare users list so we can avoid multiple checks later on
+{%- set userlist = pillar.get('users', {})  %}
+{%- for name, user in userlist.items() %}
+{%-   if user == None %}
+{%-     set user = {} %}
+{%-   endif %}
+{%- set user.absent = user.get('absent', False)  %}
+{%- endfor %}
+
+{%- for name, user in userlist.items() if not user.absent %}
+{%-   if 'sudouser' in user and user['sudouser'] %}
+{%-     do used_sudo.append(1) %}
+{%-   endif %}
+{%-   if 'google_auth' in user %}
+{%-     do used_googleauth.append(1) %}
+{%-   endif %}
 {%- endfor %}
 
 {%- if used_sudo or used_googleauth %}
 include:
-{%- if used_sudo %}
+{%-   if used_sudo %}
   - users.sudo
-{%- endif %}
-{%- if used_googleauth %}
+{%-   endif %}
+{%-   if used_googleauth %}
   - users.googleauth
-{%- endif %}
-{%- endif %}
-
-{% for name, user in pillar.get('users', {}).items() if user.absent is not defined or not user.absent %}
-{%- if user == None -%}
-{%- set user = {} -%}
-{%- endif -%}
-{%- set home = user.get('home', "/home/%s" % name) -%}
-
-{%- if 'prime_group' in user and 'name' in user['prime_group'] %}
-{%- set user_group = user.prime_group.name -%}
-{%- else -%}
-{%- set user_group = name -%}
+{%-   endif %}
 {%- endif %}
 
-{% for group in user.get('groups', []) %}
+{%- for name, user in userlist.items() if not user.absent %}
+{%-   set home = user.get('home', "/home/%s" % name) -%}
+{%-   if 'prime_group' in user and 'name' in user['prime_group'] %}
+{%-     set user_group = user.prime_group.name -%}
+{%-   else -%}
+{%-     set user_group = name -%}
+{%-   endif %}
+
+{%    for group in user.get('groups', []) %}
 {{ name }}_{{ group }}_group:
   group:
     - name: {{ group }}
     - present
-{% endfor %}
+{%    endfor %}
 
 {{ name }}_user:
   {% if user.get('createhome', True) %}
@@ -129,12 +131,13 @@ user_keydir_{{ name }}:
 
   {% if 'ssh_keys' in user %}
   {% set key_type = 'id_' + user.get('ssh_key_type', 'rsa') %}
+
 user_{{ name }}_private_key:
-  file.managed:
+  file.managed:    
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}
     - user: {{ name }}
     - group: {{ user_group }}
-    - mode: 600
+    - mode: 600    
     - show_diff: False
     - contents_pillar: users:{{ name }}:ssh_keys:privkey
     - require:
@@ -142,6 +145,7 @@ user_{{ name }}_private_key:
       {% for group in user.get('groups', []) %}
       - group: {{ name }}_{{ group }}_group
       {% endfor %}
+
 user_{{ name }}_public_key:
   file.managed:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}.pub
@@ -194,7 +198,6 @@ ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
 {% endif %}
 
 {% if 'sudouser' in user and user['sudouser'] %}
-
 sudoer-{{ name }}:
   file.managed:
     - name: {{ users.sudoers_dir }}/{{ name }}
@@ -248,7 +251,7 @@ googleauth-{{ svc }}-{{ name }}:
 
 {% endfor %}
 
-{% for name, user in pillar.get('users', {}).items() if user.absent is defined and user.absent %}
+{% for name, user in userlist.items() if user.absent %}
 {{ name }}:
 {% if 'purge' in user or 'force' in user %}
   user.absent:
