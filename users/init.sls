@@ -50,8 +50,8 @@
 {%- endfor %}
 
 
-{# include sudo and googleauth states if we need them #}
-{# #}
+# include sudo and googleauth states if we need them
+#
 {%- if used_sudo %}
 include:
   - users.sudo
@@ -62,13 +62,13 @@ include:
   - users.googleauth
 {%- endif %}
 
-{# now process all valid users #}
-{# #}
+# now process all valid users
+#
 {%- for name, user in userlist.items() if not user.absent %}
 {%    for group in user.get('groups', []) %}
 
-{# create missing groups #}
-{##}
+# create missing groups
+#
 users_group_{{ name }}_{{ group }}:
   group:
     - name: {{ group }}
@@ -76,8 +76,8 @@ users_group_{{ name }}_{{ group }}:
 {%    endfor %}
 
 
-{# create homedir, main group and user #}
-{##}
+# create homedir, main group and user
+#
 users_account_{{ name }}:
   {% if user.get('createhome', True) %}
   file.directory:
@@ -133,8 +133,8 @@ users_account_{{ name }}:
       {% endfor %}
 
 
-{# create .ssh dir for user #}
-{##}
+# create .ssh dir for user
+#
 users_keydir_{{ name }}:
   file.directory:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh
@@ -152,8 +152,8 @@ users_keydir_{{ name }}:
   {% if 'ssh_keys' in user %}
   {% set key_type = 'id_' + user.get('ssh_key_type', 'rsa') %}
 
-{# write users private key to .ssh #}
-{##}
+# write users private key to .ssh
+#
 users_private_key_{{ name }}:
   file.managed:    
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}
@@ -168,8 +168,8 @@ users_private_key_{{ name }}:
       - group: {{ group }}
       {% endfor %}
 
-{# write users public key to .ssh #}
-{##}
+# write users public key to .ssh
+#
 users_public_key_{{ name }}:
   file.managed:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}.pub
@@ -186,8 +186,8 @@ users_public_key_{{ name }}:
   {% endif %}
 
 
-{# replace users authorized keys file with contents of "ssh_auth_file" #}
-{##}
+# replace users authorized keys file with contents of "ssh_auth_file"
+#
 {% if 'ssh_auth_file' in user %}
 users_authfile_{{ name }}:
   file.managed:
@@ -202,8 +202,8 @@ users_authfile_{{ name }}:
 {% endif %}
 
 
-{# add all keys from ssh_auth to authorized_keys #}
-{##}
+# add all keys from ssh_auth to authorized_keys
+#
 {% for auth in user.ssh_auth %}
 users_ssh_auth_{{ name }}_{{ loop.index0 }}:
   ssh_auth.present:
@@ -214,7 +214,7 @@ users_ssh_auth_{{ name }}_{{ loop.index0 }}:
         - user: users_account_{{ name }}
 {% endfor %}
 
-{# remove absent keys from authorized_keys file #}
+# remove absent keys from authorized_keys file
 {# "ssh_auth.absent" is awful :( i am gonna rename this! #}
 {% for auth in user['ssh_auth.absent'] %}
 users_ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
@@ -226,6 +226,9 @@ users_ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
         - user: users_account_{{ name }}
 {% endfor %}
 
+
+# add sudo rules for a user
+#
 {% if user.sudouser %}
 users_sudoer_{{ name }}:
   file.managed:
@@ -233,8 +236,13 @@ users_sudoer_{{ name }}:
     - user: root
     - group: {{ users.root_group }} 
     - mode: '0440'
+
+# add additional sudo rules
+#
 {% if 'sudo_rules' in user %}
 {% for rule in user['sudo_rules'] %}
+# validate sudo rules
+#
 users_validate_sudo_rule_{{ name }}_{{ loop.index0 }}:
   cmd.run:
     - name: 'visudo -cf - <<<"$rule" | { read output; if [[ $output != "stdin: parsed OK" ]] ; then echo $output ; fi }'
@@ -247,6 +255,8 @@ users_validate_sudo_rule_{{ name }}_{{ loop.index0 }}:
       - file: users_sudoer_rules_{{ name }}
 {% endfor %}
 
+# write rules after validation
+#
 users_sudoer_rules_{{ name }}:
   file.managed:
     - name: {{ users.sudoers_dir }}/{{ name }}:
@@ -259,11 +269,15 @@ users_sudoer_rules_{{ name }}:
       - file: users_sudoer-{{ name }}
 {% endif %}
 {% else %}
+# remove rules if none defined for this user
+#
 users_sudoer_{{ name }}:
   file.absent:
     - name: {{ users.sudoers_dir }}/{{ name }}
 {% endif %}
 
+# google auth 
+#
 {%- if user.google_auth %}
 {%- for svc in user['google_auth'] %}
 googleauth-{{ svc }}-{{ name }}:
@@ -281,22 +295,24 @@ googleauth-{{ svc }}-{{ name }}:
 
 {% endfor %}
 
-{# now process all users and groups that shall be deleted #}
-{# #}
+# now process all users and groups that shall be deleted
+#
 {% for name, user in userlist.items() if user.absent %}
+# remove user
 users_absent_{{ name }}:
   user.absent:
     - name: {{ name }}
     - purge: {{ user.get('purge', False) }}
     - force: {{ user.get('force', False) }}
 
+# also remove sudo configuration
 users_sudoers_absent_{{ name }}:
   file.absent:
     - name: {{ users.sudoers_dir }}/{{ name }}
 {% endfor %}
 
-{# backward compatibility: alternative way of removing users and groups:  #}
-{# #}
+# backward compatibility: alternative way of removing users and groups
+#
 {% for user in pillar.get('absent_users', []) %}
 users_absent2_{{ user }}:
   user.absent:
@@ -306,7 +322,7 @@ users_absent2_{{ user }}:
 {% endfor %}
 
 {% for group in pillar.get('absent_groups', []) %}
-users_group_absent_{{ group }}:
+users_group_absent2_{{ group }}:
   group.absent:
     - name: {{ group }}
 {% endfor %}
