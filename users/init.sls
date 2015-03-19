@@ -63,13 +63,13 @@ include:
 {# #}
 {%- for name, user in userlist.items() if not user.absent %}
 {%    for group in user.get('groups', []) %}
-{{ name }}_{{ group }}_group:
+users_group_{{ name }}_{{ group }}:
   group:
     - name: {{ group }}
     - present
 {%    endfor %}
 
-{{ name }}_user:
+users_account_{{ name }}:
   {% if user.get('createhome', True) %}
   file.directory:
     - name: {{ user.home }}
@@ -123,7 +123,7 @@ include:
       - group: {{ group }}
       {% endfor %}
 
-user_keydir_{{ name }}:
+users_keydir_{{ name }}:
   file.directory:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh
     - user: {{ name }}
@@ -140,7 +140,7 @@ user_keydir_{{ name }}:
   {% if 'ssh_keys' in user %}
   {% set key_type = 'id_' + user.get('ssh_key_type', 'rsa') %}
 
-user_{{ name }}_private_key:
+users_private_key_{{ name }}:
   file.managed:    
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}
     - user: {{ name }}
@@ -149,12 +149,12 @@ user_{{ name }}_private_key:
     - show_diff: False
     - contents_pillar: users:{{ name }}:ssh_keys:privkey
     - require:
-      - user: {{ name }}_user
+      - user: {{ name }}
       {% for group in user.get('groups', []) %}
-      - group: {{ name }}_{{ group }}_group
+      - group: {{ group }}
       {% endfor %}
 
-user_{{ name }}_public_key:
+users_public_key_{{ name }}:
   file.managed:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}.pub
     - user: {{ name }}
@@ -163,15 +163,16 @@ user_{{ name }}_public_key:
     - show_diff: False
     - contents_pillar: users:{{ name }}:ssh_keys:pubkey
     - require:
-      - user: {{ name }}_user
+      - user: {{ name }}
       {% for group in user.get('groups', []) %}
-      - group: {{ name }}_{{ group }}_group
+      - group: {{ group }}
       {% endfor %}
   {% endif %}
 
 {% if 'ssh_auth_file' in user %}
-{{ user.home }}/.ssh/authorized_keys:
+users_authfile_{{ name }}:
   file.managed:
+    - name: {{ user.home }}/.ssh/authorized_keys
     - user: {{ name }}
     - group: {{ name }}
     - mode: 600
@@ -183,30 +184,30 @@ user_{{ name }}_public_key:
 
 {% if 'ssh_auth' in user %}
 {% for auth in user['ssh_auth'] %}
-ssh_auth_{{ name }}_{{ loop.index0 }}:
+users_ssh_auth_{{ name }}_{{ loop.index0 }}:
   ssh_auth.present:
     - user: {{ name }}
     - name: {{ auth }}
     - require:
-        - file: {{ name }}_user
-        - user: {{ name }}_user
+        - file: users_account_{{ name }}
+        - user: users_account_{{ name }}
 {% endfor %}
 {% endif %}
 
 {% if 'ssh_auth.absent' in user %}
 {% for auth in user['ssh_auth.absent'] %}
-ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
+users_ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
   ssh_auth.absent:
     - user: {{ name }}
     - name: {{ auth }}
     - require:
-        - file: {{ name }}_user
-        - user: {{ name }}_user
+        - file: users_account_{{ name }}
+        - user: users_account_{{ name }}
 {% endfor %}
 {% endif %}
 
 {% if 'sudouser' in user and user['sudouser'] %}
-sudoer-{{ name }}:
+users_sudoer_{{ name }}:
   file.managed:
     - name: {{ users.sudoers_dir }}/{{ name }}
     - user: root
@@ -214,7 +215,7 @@ sudoer-{{ name }}:
     - mode: '0440'
 {% if 'sudo_rules' in user %}
 {% for rule in user['sudo_rules'] %}
-"validate {{ name }} sudo rule {{ loop.index0 }} {{ name }} {{ rule }}":
+users_validate_sudo_rule_{{ name }}_{{ loop.index0 }}:
   cmd.run:
     - name: 'visudo -cf - <<<"$rule" | { read output; if [[ $output != "stdin: parsed OK" ]] ; then echo $output ; fi }'
     - stateful: True
@@ -223,21 +224,22 @@ sudoer-{{ name }}:
       # Specify the rule via an env var to avoid shell quoting issues.
       - rule: "{{ name }} {{ rule }}"
     - require_in:
-      - file: {{ users.sudoers_dir }}/{{ name }}
+      - file: users_sudoer_rules_{{ name }}
 {% endfor %}
 
-{{ users.sudoers_dir }}/{{ name }}:
+users_sudoer_rules_{{ name }}:
   file.managed:
+    - name: {{ users.sudoers_dir }}/{{ name }}:
     - contents: |
       {%- for rule in user['sudo_rules'] %}
         {{ name }} {{ rule }}
       {%- endfor %}
     - require:
       - file: sudoer-defaults
-      - file: sudoer-{{ name }}
+      - file: users_sudoer-{{ name }}
 {% endif %}
 {% else %}
-{{ users.sudoers_dir }}/{{ name }}:
+users_sudoer_{{ name }}:
   file.absent:
     - name: {{ users.sudoers_dir }}/{{ name }}
 {% endif %}
@@ -259,36 +261,33 @@ googleauth-{{ svc }}-{{ name }}:
 
 {% endfor %}
 
-{# now process all users that shall be deleted #}
+{# now process all users and groups that shall be deleted #}
 {# #}
 {% for name, user in userlist.items() if user.absent %}
-{{ name }}:
-{% if 'purge' in user or 'force' in user %}
+users_absent_{{ name }}:
   user.absent:
-    {% if 'purge' in user %}
-    - purge: {{ user['purge'] }}
-    {% endif %}
-    {% if 'force' in user %}
-    - force: {{ user['force'] }}
-    {% endif %}
-{% else %}
-  user.absent
-{% endif -%}
-{{ users.sudoers_dir }}/{{ name }}:
+    - name: {{ name }}
+    - purge: {{ user.get('purge', False) }}
+    - force: {{ user.get('force', False) }}
+
+users_sudoers_absent_{{ name }}:
   file.absent:
     - name: {{ users.sudoers_dir }}/{{ name }}
 {% endfor %}
 
+{# backward compatibility: alternative way of removing users and groups:  #}
+{# #}
 {% for user in pillar.get('absent_users', []) %}
-{{ user }}:
-  user.absent
-{{ users.sudoers_dir }}/{{ user }}:
+users_absent2_{{ user }}:
+  user.absent:
+    - name: {{ user }}:
   file.absent:
     - name: {{ users.sudoers_dir }}/{{ user }}
 {% endfor %}
 
 {% for group in pillar.get('absent_groups', []) %}
-{{ group }}:
-  group.absent
+users_group_absent_{{ group }}:
+  group.absent:
+    - name: {{ group }}
 {% endfor %}
 
