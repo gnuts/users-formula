@@ -1,7 +1,7 @@
 # vim: sts=2 ts=2 sw=2 et ai
 {% from "users/map.jinja" import users with context %}
-{% set used_sudo = [] %}
-{% set used_googleauth = [] %}
+{% set used_sudo = False %}
+{% set used_googleauth = False %}
 
 #
 # TODO
@@ -31,8 +31,11 @@
                 'google_auth': user.get('google_auth', False),
                 'prime_group': user.get('prime_group', {}),
                 'home'       : user.get('home', "/home/%s" % name),
+                'ssh_auth'   : user.get('ssh_auth', []),
+                'ssh_auth.absent'   : user.get('ssh_auth.absent', []),
       })
 %}
+{# "ssh_auth.absent" is ambiguous. it should be renamed to e.g. ssh_auth_absent #}
 {%-   do user.update({
                 'user_group' : user.prime_group.get('name',name)
       })
@@ -63,12 +66,18 @@ include:
 {# #}
 {%- for name, user in userlist.items() if not user.absent %}
 {%    for group in user.get('groups', []) %}
+
+{# create missing groups #}
+{##}
 users_group_{{ name }}_{{ group }}:
   group:
     - name: {{ group }}
     - present
 {%    endfor %}
 
+
+{# create homedir, main group and user #}
+{##}
 users_account_{{ name }}:
   {% if user.get('createhome', True) %}
   file.directory:
@@ -123,6 +132,9 @@ users_account_{{ name }}:
       - group: {{ group }}
       {% endfor %}
 
+
+{# create .ssh dir for user #}
+{##}
 users_keydir_{{ name }}:
   file.directory:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh
@@ -140,6 +152,8 @@ users_keydir_{{ name }}:
   {% if 'ssh_keys' in user %}
   {% set key_type = 'id_' + user.get('ssh_key_type', 'rsa') %}
 
+{# write users private key to .ssh #}
+{##}
 users_private_key_{{ name }}:
   file.managed:    
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}
@@ -154,6 +168,8 @@ users_private_key_{{ name }}:
       - group: {{ group }}
       {% endfor %}
 
+{# write users public key to .ssh #}
+{##}
 users_public_key_{{ name }}:
   file.managed:
     - name: {{ user.get('home', '/home/{0}'.format(name)) }}/.ssh/{{ key_type }}.pub
@@ -169,6 +185,9 @@ users_public_key_{{ name }}:
       {% endfor %}
   {% endif %}
 
+
+{# replace users authorized keys file with contents of "ssh_auth_file" #}
+{##}
 {% if 'ssh_auth_file' in user %}
 users_authfile_{{ name }}:
   file.managed:
@@ -182,8 +201,10 @@ users_authfile_{{ name }}:
         {% endfor -%}
 {% endif %}
 
-{% if 'ssh_auth' in user %}
-{% for auth in user['ssh_auth'] %}
+
+{# add all keys from ssh_auth to authorized_keys #}
+{##}
+{% for auth in user.ssh_auth %}
 users_ssh_auth_{{ name }}_{{ loop.index0 }}:
   ssh_auth.present:
     - user: {{ name }}
@@ -192,9 +213,9 @@ users_ssh_auth_{{ name }}_{{ loop.index0 }}:
         - file: users_account_{{ name }}
         - user: users_account_{{ name }}
 {% endfor %}
-{% endif %}
 
-{% if 'ssh_auth.absent' in user %}
+{# remove absent keys from authorized_keys file #}
+{# "ssh_auth.absent" is awful :( i am gonna rename this! #}
 {% for auth in user['ssh_auth.absent'] %}
 users_ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
   ssh_auth.absent:
@@ -204,9 +225,8 @@ users_ssh_auth_delete_{{ name }}_{{ loop.index0 }}:
         - file: users_account_{{ name }}
         - user: users_account_{{ name }}
 {% endfor %}
-{% endif %}
 
-{% if 'sudouser' in user and user['sudouser'] %}
+{% if user.sudouser %}
 users_sudoer_{{ name }}:
   file.managed:
     - name: {{ users.sudoers_dir }}/{{ name }}
