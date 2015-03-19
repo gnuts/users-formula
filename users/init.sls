@@ -21,7 +21,9 @@
 {# prepare userlist dictionary so we can avoid multiple checks and simplify syntax later on #}
 {# #}
 {%- set userlist = pillar.get('users', {})  %}
+
 {%- for name, user in userlist.items() %}
+
 {%-   if user == None %}
 {%-     set user = {} %}
 {%-   endif %}
@@ -35,7 +37,9 @@
                 'ssh_auth.absent'   : user.get('ssh_auth.absent', []),
       })
 %}
-{# "ssh_auth.absent" is ambiguous. it should be renamed to e.g. ssh_auth_absent #}
+{#              NOTE: "ssh_auth.absent" is ambiguous. it should be renamed to e.g. ssh_auth_absent #}
+{##}
+{# add more defaults that we could not add with previous .update #}
 {%-   do user.update({
                 'user_group' : user.prime_group.get('name',name)
       })
@@ -46,6 +50,7 @@
 {%-   if user.google_auth %}
 {%-     set used_googleauth = True %}
 {%-   endif %}
+{#    finally update the list of users to apply the defaults  #}
 {%-   do userlist.update({name:user}) %}
 {%- endfor %}
 
@@ -65,15 +70,15 @@ include:
 # now process all valid users
 #
 {%- for name, user in userlist.items() if not user.absent %}
-{%    for group in user.get('groups', []) %}
 
 # create missing groups
 #
+{% for group in user.get('groups', []) %}
 users_group_{{ name }}_{{ group }}:
   group:
     - name: {{ group }}
     - present
-{%    endfor %}
+{% endfor %}
 
 
 # create homedir, main group and user
