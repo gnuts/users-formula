@@ -57,8 +57,17 @@ absent_users:
   - donald
   - bad_guy
 
-# add keys of userlists to accounts:
-users_authgroups:
+absent_groups:
+  - badguys
+  - badgroup
+
+
+## if you want to have multiple users to have access to special accounts
+## (e.g. root) you can define a "access" pillar.
+## all keys in "ssh_auth" of listed users will be added to the specified account:
+## this will overwrite authorized_keys. All ssh keys not known to the "authorized_users" pillar will be removed.
+
+authorized_users:
   root:
     - auser
     - buser
@@ -66,9 +75,10 @@ users_authgroups:
     - buser
     - cuser
 
-# only create these user accounts:
-# if "accounts
-users_accounts:
+## if you do not want to have every account on every machine you can define a "applied_accounts" pillar:
+## only create these user accounts:
+
+applied_accounts:
   - auser
   - buser
 
