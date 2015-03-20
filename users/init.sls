@@ -1,25 +1,10 @@
 # vim: sts=2 ts=2 sw=2 et ai
 {% from "users/map.jinja" import users with context %}
-{% set used_sudo = False %}
-{% set used_googleauth = False %}
+{% set used_sudo = [] %}
+{% set used_google_auth = [] %}
 
+# prepare userlist dictionary so we can avoid multiple checks and simplify syntax later on
 #
-# TODO
-# add authgroups:
-#   * an authgroup is a group of users that shall have access to a unix account on a host
-#     -> this is a separate sls
-#
-# add accounts:
-#   * if an accounts pillar exists, only add users on this host that are mentioned in accounts.
-#     * groups of users to add
-#     * additional single users to add
-#     * absent users: make sure, these are deleted
-#
-# -> put authgroups and accounts to separate sls files, keep changes to init.sls minimal
-
-
-{# prepare userlist dictionary so we can avoid multiple checks and simplify syntax later on #}
-{# #}
 {%- set userlist = pillar.get('users', {})  %}
 
 {%- for name, user in userlist.items() %}
@@ -28,54 +13,64 @@
 {%-     set user = {} %}
 {%-   endif %}
 {%-   do user.update({
-                'absent'     : user.get('absent', False),
-                'sudouser'   : user.get('sudouser', False),
-                'google_auth': user.get('google_auth', False),
-                'prime_group': user.get('prime_group', {}),
-                'home'       : user.get('home', "/home/%s" % name),
-                'ssh_auth'   : user.get('ssh_auth', []),
-                'ssh_auth.absent'   : user.get('ssh_auth.absent', []),
+        'absent'     : user.get('absent', False),
+        'sudouser'   : user.get('sudouser', False),
+        'google_auth': user.get('google_auth', False),
+        'prime_group': user.get('prime_group', {}),
+        'home'       : user.get('home', "/home/%s" % name),
+        'ssh_auth'   : user.get('ssh_auth', []),
+        'ssh_auth.absent'   : user.get('ssh_auth.absent', []),
       })
 %}
-{#              NOTE: "ssh_auth.absent" is ambiguous. it should be renamed to e.g. ssh_auth_absent #}
-{##}
-{# add more defaults that we could not add with previous .update #}
-{%-   do user.update({
-                'user_group' : user.prime_group.get('name',name)
-      })
-%}
+      # NOTE: "ssh_auth.absent" is ambiguous.
+      #       it should be renamed to e.g. ssh_auth_absent 
+      # NOTE: append(1) is used because jinja does not support global variables:
+      #       http://stackoverflow.com/questions/4870346/can-a-jinja-variables-scope-extend-beyond-in-an-inner-block
 {%-   if user.sudouser %}
-{%-     set  used_sudo = True %}
+{%-     do used_sudo.append(1) %}
 {%-   endif %}
 {%-   if user.google_auth %}
-{%-     set used_googleauth = True %}
+{%-     do used_google_auth.append(1) %}
 {%-   endif %}
-{#    finally update the list of users to apply the defaults  #}
-{%-   do userlist.update({name:user}) %}
+      # add more defaults that we could not add with previous .update #}
+{%-   do user.update({
+        'user_group' : user.prime_group.get('name',name),
+      })
+%}
+      # finally update the list of users to apply the defaults  #}
+{%-   do userlist.update({
+        name: user,
+      }) %}
 {%- endfor %}
 
 
-# include sudo and googleauth states if we need them
+# include more optional states if we need them
 #
 {%- if used_sudo %}
 include:
   - users.sudo
 {%- endif %}
 
-{%- if used_googleauth %}
+{%- if used_google_auth %}
 include:
   - users.googleauth
 {%- endif %}
 
+# prepare applied_accounts
+# if it is not available, add all users
+{% set applied_accounts = pillar.get('applied_accounts',userlist.keys()) %}
+
+
 # now process all valid users
 #
-{%- for name, user in userlist.items() if not user.absent %}
+{%- for name, user in userlist.items() if not user.absent and name in applied_accounts %}
 
 # create missing groups
 #
 {% for group in user.get('groups', []) %}
 users_group_{{ name }}_{{ group }}:
   group:
+    - applied: {{ applied_accounts }}
     - name: {{ group }}
     - present
 {% endfor %}
@@ -281,7 +276,7 @@ users_sudoer_{{ name }}:
     - name: {{ users.sudoers_dir }}/{{ name }}
 {% endif %}
 
-# google auth 
+# create google auth files
 #
 {%- if user.google_auth %}
 {%- for svc in user['google_auth'] %}
