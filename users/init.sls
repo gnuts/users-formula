@@ -60,6 +60,23 @@ include:
 # if it is not available, add all users
 {% set applied_accounts = pillar.get('applied_accounts',userlist.keys()) %}
 
+# now update all targetusers in "authorized_users" with all "ssh_auth" sshkeys 
+# from authusers specifified as list below authoried_users.$targetuser.
+# keys will be appended to ssh_auth_file
+# if authuser is absent, his keys will not be added.
+
+{% set authorized_users = pillar.get('authorized_users',{}) %}
+{%- for targetusername, authuserlist in authorized_users.items() %}
+{%-   set targetuser = userlist.get(targetusername, {}) %}
+{%-   set keylist = targetuser.get('ssh_auth_file',[]) %}
+{%-   for authusername in authuserlist %}
+{%-     set authuser = userlist.get(authusername,{}) %}
+{%-     if not authuser.get('absent', False) %}
+{%-       do keylist.extend(authuser.get('ssh_auth',[])) %}
+{%-     endif %}
+{%-   endfor %}
+{%-   do targetuser.update({ 'ssh_auth_file': keylist }) %}
+{%- endfor %}
 
 # now process all valid users
 #
