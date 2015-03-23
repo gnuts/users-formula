@@ -75,6 +75,26 @@ authorized_users:
     - buser
     - cuser
 
+## you can also build multiple groups of users
+## this makes it easy to include users with additional pillars:
+authorized_acl:
+  devgroup:
+    root:
+      - foo
+      - bar
+    git:
+      - foo
+      - bar
+  supportgroup:
+    root:
+      - sup1
+      - sup2
+    staff:
+      - sup1
+      - sup2
+      - sup3
+
+
 ## if you do not want to have every account on every machine you can define a "applied_accounts" pillar:
 ## only create these user accounts:
 
