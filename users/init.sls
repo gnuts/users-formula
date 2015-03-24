@@ -96,10 +96,10 @@ include:
 #
 {% for group in user.get('groups', []) %}
 users_group_{{ name }}_{{ group }}:
-  group:
-    - applied: {{ applied_accounts }}
+  group.present:
     - name: {{ group }}
-    - present
+    - addusers:
+      - {{ name }}
 {% endfor %}
 
 
