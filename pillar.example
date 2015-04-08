@@ -56,3 +56,50 @@ users:
 absent_users:
   - donald
   - bad_guy
+
+absent_groups:
+  - badguys
+  - badgroup
+
+
+## if you want to have multiple users to have access to special accounts
+## (e.g. root) you can define a "access" pillar.
+## all keys in "ssh_auth" of listed users will be added to the specified account:
+## this will overwrite authorized_keys. All ssh keys not known to the "authorized_users" pillar will be removed.
+
+authorized_users:
+  root:
+    - auser
+    - buser
+  git:
+    - buser
+    - cuser
+
+## you can also build multiple groups of users
+## this makes it easy to include users with additional pillars:
+authorized_acl:
+  devgroup:
+    root:
+      - foo
+      - bar
+    git:
+      - foo
+      - bar
+  supportgroup:
+    root:
+      - sup1
+      - sup2
+    staff:
+      - sup1
+      - sup2
+      - sup3
+
+
+## if you do not want to have every account on every machine you can define a "applied_accounts" pillar:
+## only create these user accounts:
+
+applied_accounts:
+  - auser
+  - buser
+
+
