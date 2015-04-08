@@ -155,8 +155,6 @@ users_account_{{ name }}:
 users_group_{{ name }}_{{ group }}:
   group.present:
     - name: {{ group }}
-    - addusers:
-      - {{ name }}
 {% endfor %}
 
 
