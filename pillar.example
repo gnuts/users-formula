@@ -1,3 +1,7 @@
+
+# create a password:  mkpasswd --method=sha-512 --salt=$(pwgen 8 1)
+
+
 users:
   ## Minimal required pillar values
   auser:
