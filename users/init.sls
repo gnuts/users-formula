@@ -92,16 +92,6 @@ include:
 #
 {%- for name, user in userlist.items() if not user.absent and name in applied_accounts %}
 
-# create missing groups
-#
-{% for group in user.get('groups', []) %}
-users_group_{{ name }}_{{ group }}:
-  group.present:
-    - name: {{ group }}
-    - addusers:
-      - {{ name }}
-{% endfor %}
-
 
 # create homedir, main group and user
 #
@@ -158,6 +148,14 @@ users_account_{{ name }}:
       {% for group in user.get('groups', []) -%}
       - group: {{ group }}
       {% endfor %}
+
+# create missing groups
+#
+{% for group in user.get('groups', []) %}
+users_group_{{ name }}_{{ group }}:
+  group.present:
+    - name: {{ group }}
+{% endfor %}
 
 
 # create .ssh dir for user
